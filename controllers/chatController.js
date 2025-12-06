@@ -1,19 +1,35 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Initialize Gemini AI only if API key is available
+let genAI = null;
+if (process.env.GEMINI_API_KEY) {
+    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    console.log('✅ Chat: Gemini AI initialized');
+} else {
+    console.warn('⚠️ Chat: GEMINI_API_KEY not found. Chat feature disabled.');
+}
 
 exports.chat = async (req, res) => {
     try {
+        // Check if Gemini is initialized
+        if (!genAI) {
+            console.error('❌ Chat failed: GEMINI_API_KEY not configured');
+            return res.status(503).json({
+                error: 'AI assistant is not configured. Please contact support.',
+                reply: 'Sorry, the AI assistant is currently unavailable. Please try again later.'
+            });
+        }
+
         const { message, context } = req.body;
 
         if (!message) {
             return res.status(400).json({ error: 'Message is required' });
         }
 
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        // Use gemini-2.5-flash (available for this API key)
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-        // Construct a system-like prompt (Gemini Pro doesn't strictly support system messages in the same way as GPT-4, 
-        // so we prepend instructions).
+        // Construct a system-like prompt
         const systemInstruction = `
             You are PlagZap Assistant, a helpful and friendly AI assistant for a plagiarism detection and rewriting tool called PlagZap.
             Your goal is to help users with:
@@ -36,7 +52,27 @@ exports.chat = async (req, res) => {
         res.json({ reply: text });
 
     } catch (error) {
-        console.error('Chat Error:', error);
-        res.status(500).json({ error: 'Failed to generate chat response' });
+        console.error('Chat Error:', error.message);
+        console.error('Chat Error Details:', error);
+
+        // Check for specific error types
+        if (error.message?.includes('API key')) {
+            return res.status(503).json({
+                error: 'AI service authentication failed',
+                reply: 'Sorry, I\'m having trouble connecting to my AI service. Please try again later.'
+            });
+        }
+
+        if (error.message?.includes('model')) {
+            return res.status(503).json({
+                error: 'AI model unavailable',
+                reply: 'Sorry, the AI model is temporarily unavailable. Please try again later.'
+            });
+        }
+
+        res.status(500).json({
+            error: 'Failed to generate chat response',
+            reply: 'Sorry, I encountered an error. Please try again.'
+        });
     }
 };

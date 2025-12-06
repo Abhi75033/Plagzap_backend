@@ -231,17 +231,7 @@ exports.checkPlagiarism = async (req, res) => {
         // Get updated status for response
         const updatedStatus = user.canPerformAnalysis();
 
-        // Save to History
-        const historyEntry = new History({
-            userId: user._id,
-            originalText: text,
-            highlights,
-            overallScore: plagiarismScore,
-        });
-
-        await historyEntry.save();
-
-        // Perform AI Detection (REAL SCORES)
+        // Perform AI Detection (REAL SCORES) - Do this BEFORE saving history
         let aiDetection = { score: 0, reason: "Analysis unavailable", language: 'English' };
         try {
             aiDetection = await detectAI(text);
@@ -256,6 +246,16 @@ exports.checkPlagiarism = async (req, res) => {
 
         // Combined Risk Score: 50% Plagiarism + 50% AI
         const riskScore = Math.round((plagiarismScore * 0.5) + (safeAiScore * 0.5));
+
+        // Save to History with the COMBINED riskScore (not just plagiarismScore)
+        const historyEntry = new History({
+            userId: user._id,
+            originalText: text,
+            highlights,
+            overallScore: riskScore,
+        });
+
+        await historyEntry.save();
 
         // Dispatch Webhook (Fire and Forget)
         const webhookPayload = {

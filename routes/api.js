@@ -28,7 +28,7 @@ router.post('/rewrite', authMiddleware, rewriteController.rewriteContent);
 router.get('/history', authMiddleware, historyController.getHistory);
 router.post('/upload', authMiddleware, upload.single('file'), uploadController.extractText);
 router.post('/extract-url', authMiddleware, urlController.extractUrl);
-router.post('/chat', authMiddleware, chatController.chat);
+router.post('/chat', chatController.chat); // Public - no auth required for help
 
 // Citation Routes
 router.post('/citation/generate', authMiddleware, citationController.createCitation);
