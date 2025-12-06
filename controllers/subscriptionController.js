@@ -114,6 +114,15 @@ exports.getPlans = async (req, res) => {
 // Create Razorpay order
 exports.createOrder = async (req, res) => {
     try {
+        // Check if Razorpay is properly initialized
+        if (!razorpay) {
+            console.error('❌ Razorpay not initialized. Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET environment variables.');
+            return res.status(503).json({
+                error: 'Payment service is not configured. Please contact support.',
+                details: 'Razorpay credentials are missing on the server.'
+            });
+        }
+
         const { planId } = req.body;
         const user = req.user;
 
