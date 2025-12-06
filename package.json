@@ -1,14 +1,19 @@
 {
   "name": "server",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
+    "start": "node server.js",
+    "build": "npm install",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "PlagZap Backend API",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "axios": "^1.13.2",
