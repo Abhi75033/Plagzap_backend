@@ -11,8 +11,24 @@ const adminAuth = require('./middleware/adminAuth'); // New import for admin aut
 
 const app = express();
 
+// Root endpoint
 app.get('/', (req, res) => {
-    res.send('Welcome to Plagrism Checker API');
+    res.send('Welcome to PlagZap API - Server is running!');
+});
+
+// Health check endpoint for UptimeRobot
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'ok',
+        message: 'Server is healthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    });
+});
+
+// Simple ping endpoint (alternative)
+app.get('/ping', (req, res) => {
+    res.status(200).send('pong');
 });
 
 
