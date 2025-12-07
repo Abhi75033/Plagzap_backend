@@ -46,6 +46,24 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: null,
     },
+    subscriptionStatus: {
+        type: String,
+        enum: ['active', 'paused', 'suspended'],
+        default: 'active',
+    },
+    adminGranted: {
+        type: Boolean,
+        default: false,
+    },
+    adminGrantedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+    },
+    adminGrantedAt: {
+        type: Date,
+        default: null,
+    },
     usageCount: {
         type: Number,
         default: 0,
@@ -155,6 +173,8 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 // Method to check if subscription is active
 userSchema.methods.hasActiveSubscription = function () {
     if (this.subscriptionTier === 'free') return false;
+    // Check if subscription is paused or suspended
+    if (this.subscriptionStatus && this.subscriptionStatus !== 'active') return false;
     // If paid tier but no expiry set, treat as active (for backwards compatibility)
     if (!this.subscriptionExpiry) return true;
     return this.subscriptionExpiry > new Date();
@@ -189,7 +209,30 @@ userSchema.methods.canPerformAnalysis = function () {
         };
     }
 
-    // Check if subscription is active
+    // Check if subscription is paused or suspended (premium services blocked)
+    if (this.subscriptionStatus === 'paused') {
+        return {
+            allowed: false,
+            reason: 'SUBSCRIPTION_PAUSED',
+            remaining: 0,
+            limit: 0,
+            isDaily: false,
+            message: 'Your subscription is paused. Contact admin to resume.',
+        };
+    }
+
+    if (this.subscriptionStatus === 'suspended') {
+        return {
+            allowed: false,
+            reason: 'SUBSCRIPTION_SUSPENDED',
+            remaining: 0,
+            limit: 0,
+            isDaily: false,
+            message: 'Your subscription has been suspended. Contact support.',
+        };
+    }
+
+    // Check if subscription is active (not expired)
     if (!this.hasActiveSubscription()) {
         return {
             allowed: false,

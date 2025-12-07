@@ -16,4 +16,7 @@ router.post('/purchase', authMiddleware, subscriptionController.purchaseSubscrip
 router.post('/cancel', authMiddleware, subscriptionController.cancelSubscription);
 router.get('/usage', authMiddleware, subscriptionController.getUsage);
 
+// Coupon validation
+router.post('/validate-coupon', authMiddleware, subscriptionController.validateCoupon);
+
 module.exports = router;

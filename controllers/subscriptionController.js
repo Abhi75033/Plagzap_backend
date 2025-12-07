@@ -123,7 +123,7 @@ exports.createOrder = async (req, res) => {
             });
         }
 
-        const { planId } = req.body;
+        const { planId, couponCode } = req.body;
         const user = req.user;
 
         // Validate plan
@@ -132,9 +132,39 @@ exports.createOrder = async (req, res) => {
             return res.status(400).json({ error: 'Invalid plan selected' });
         }
 
-        // Create Razorpay order
+        let finalPrice = plan.price;
+        let appliedCoupon = null;
+        let discountAmount = 0;
+
+        // Apply coupon if provided
+        if (couponCode) {
+            const Coupon = require('../models/Coupon');
+            const coupon = await Coupon.findOne({ code: couponCode.toUpperCase(), isActive: true });
+
+            if (!coupon) {
+                return res.status(400).json({ error: 'Invalid coupon code' });
+            }
+
+            const validation = coupon.isValid(user._id, planId, plan.price);
+            if (!validation.valid) {
+                return res.status(400).json({ error: validation.reason });
+            }
+
+            discountAmount = coupon.calculateDiscount(plan.price);
+            finalPrice = Math.max(plan.price - discountAmount, 0);
+            appliedCoupon = {
+                code: coupon.code,
+                discountPercent: coupon.discountPercent,
+                discountAmount,
+                couponId: coupon._id,
+            };
+
+            console.log(`✅ Coupon ${coupon.code} applied: ₹${discountAmount} off`);
+        }
+
+        // Create Razorpay order with final price
         const options = {
-            amount: plan.price * 100, // Razorpay expects amount in paise
+            amount: finalPrice * 100, // Razorpay expects amount in paise
             currency: 'INR',
             receipt: `rcpt_${Date.now()}`, // Shortened to under 40 chars
             notes: {
@@ -142,6 +172,9 @@ exports.createOrder = async (req, res) => {
                 planId: plan.id,
                 durationDays: plan.durationDays.toString(),
                 userEmail: user.email,
+                couponCode: couponCode || '',
+                originalAmount: plan.price.toString(),
+                discountAmount: discountAmount.toString(),
             },
         };
 
@@ -150,10 +183,13 @@ exports.createOrder = async (req, res) => {
         res.json({
             orderId: order.id,
             amount: order.amount,
+            originalAmount: plan.price * 100,
+            discountAmount: discountAmount * 100,
             currency: order.currency,
             planId: plan.id,
             planName: plan.name,
             keyId: process.env.RAZORPAY_KEY_ID,
+            appliedCoupon,
         });
     } catch (error) {
         console.error('Create Razorpay order error:', error);
@@ -355,3 +391,49 @@ exports.cancelSubscription = async (req, res) => {
     }
 };
 
+// Validate coupon code (for users to check before checkout)
+exports.validateCoupon = async (req, res) => {
+    try {
+        const { code, planId } = req.body;
+        const user = req.user;
+
+        if (!code) {
+            return res.status(400).json({ error: 'Coupon code is required' });
+        }
+
+        const Coupon = require('../models/Coupon');
+        const coupon = await Coupon.findOne({ code: code.toUpperCase(), isActive: true });
+
+        if (!coupon) {
+            return res.status(404).json({ valid: false, error: 'Invalid coupon code' });
+        }
+
+        // Check basic validity (expiry, usage limit, already used by user)
+        if (coupon.expiresAt && new Date() > new Date(coupon.expiresAt)) {
+            return res.status(400).json({ valid: false, error: 'Coupon has expired' });
+        }
+        if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
+            return res.status(400).json({ valid: false, error: 'Coupon usage limit reached' });
+        }
+        if (coupon.usedBy && coupon.usedBy.includes(user._id)) {
+            return res.status(400).json({ valid: false, error: 'You have already used this coupon' });
+        }
+
+        // If planId provided, validate against specific plan; otherwise just return coupon info
+
+        res.json({
+            valid: true,
+            coupon: {
+                code: coupon.code,
+                discountPercent: coupon.discountPercent,
+                discountType: coupon.discountType || 'percent',
+                expiresAt: coupon.expiresAt,
+                description: coupon.description,
+                applicablePlans: coupon.applicablePlans || [],
+            },
+        });
+    } catch (error) {
+        console.error('Validate coupon error:', error);
+        res.status(500).json({ error: 'Failed to validate coupon' });
+    }
+};

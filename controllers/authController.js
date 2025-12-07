@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const emailService = require('../services/emailService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const JWT_EXPIRES_IN = '30d';
@@ -35,6 +36,11 @@ exports.register = async (req, res) => {
 
         // Generate token
         const token = generateToken(user._id);
+
+        // Send welcome email (async, don't wait)
+        emailService.sendWelcomeEmail(email, name).catch(err => {
+            console.log('Welcome email error (non-blocking):', err.message);
+        });
 
         res.status(201).json({
             token,
