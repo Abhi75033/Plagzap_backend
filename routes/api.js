@@ -41,6 +41,45 @@ router.post('/team/create', authMiddleware, teamController.createTeam);
 router.post('/team/join', authMiddleware, teamController.joinTeam);
 router.post('/team/leave', authMiddleware, teamController.leaveTeam);
 
+// Team Messaging Routes
+const messageController = require('../controllers/messageController');
+router.get('/team/messages', authMiddleware, messageController.getMessages);
+router.get('/team/messages/search', authMiddleware, messageController.searchMessages); // Search messages
+router.post('/team/messages', authMiddleware, messageController.sendMessage);
+router.post('/team/messages/read', authMiddleware, messageController.markAsRead);
+router.delete('/team/messages/clear-all', authMiddleware, messageController.clearAllMessages);
+router.delete('/team/messages/:id', authMiddleware, messageController.deleteMessage);
+router.post('/team/messages/:id/react', authMiddleware, messageController.addReaction);
+router.post('/team/messages/:id/pin', authMiddleware, messageController.togglePin);
+router.get('/team/messages/:id/receipts', authMiddleware, messageController.getReadReceipts);
+router.get('/team/messages/:id/replies', authMiddleware, messageController.getReplies); // Get thread replies
+router.get('/team/members-list', authMiddleware, messageController.getTeamMembers);
+
+// Team Admin Routes
+router.get('/team/settings', authMiddleware, messageController.getTeamSettings);
+router.patch('/team/settings', authMiddleware, messageController.updateTeamSettings);
+router.patch('/team/members/:memberId/role', authMiddleware, messageController.updateMemberRole);
+router.post('/team/members/:memberId/mute', authMiddleware, messageController.muteUnmuteMember);
+router.delete('/team/members/:memberId', authMiddleware, messageController.removeMember);
+router.get('/team/activity', authMiddleware, messageController.getActivityLog);
+
+// Team History & Analytics Routes
+const teamHistoryController = require('../controllers/teamHistoryController');
+router.get('/team/history', authMiddleware, teamHistoryController.getTeamHistory);
+router.get('/team/history/:id', authMiddleware, teamHistoryController.getSharedHistoryDetails);
+router.post('/team/history/:id/share', authMiddleware, teamHistoryController.shareWithTeam);
+router.post('/team/history/:id/unshare', authMiddleware, teamHistoryController.unshareFromTeam);
+router.post('/team/history/:id/comment', authMiddleware, teamHistoryController.addComment);
+router.delete('/team/history/:id/comment/:commentId', authMiddleware, teamHistoryController.deleteComment);
+router.get('/team/analytics', authMiddleware, teamHistoryController.getTeamAnalytics);
+
+// Team Tasks Routes
+const teamTaskController = require('../controllers/teamTaskController');
+router.get('/team/tasks', authMiddleware, teamTaskController.getTasks);
+router.post('/team/tasks', authMiddleware, teamTaskController.createTask);
+router.patch('/team/tasks/:id', authMiddleware, teamTaskController.updateTask);
+router.delete('/team/tasks/:id', authMiddleware, teamTaskController.deleteTask);
+
 // Gamification Route
 const { getGamificationStats } = require('../services/gamificationService');
 router.get('/gamification/stats', authMiddleware, async (req, res) => {
@@ -52,5 +91,16 @@ router.get('/gamification/stats', authMiddleware, async (req, res) => {
         res.status(500).json({ error: 'Failed to get gamification stats' });
     }
 });
+
+// Feedback Routes (public)
+const feedbackController = require('../controllers/feedbackController');
+router.get('/feedback', feedbackController.getApprovedFeedbacks); // Public - get approved feedbacks
+router.post('/feedback', feedbackController.submitFeedback); // Public - submit feedback
+
+// Admin Feedback Management
+const adminMiddleware = require('../middleware/adminAuth');
+router.get('/admin/feedbacks', authMiddleware, adminMiddleware, feedbackController.getAllFeedbacks);
+router.patch('/admin/feedbacks/:id', authMiddleware, adminMiddleware, feedbackController.updateFeedbackStatus);
+router.delete('/admin/feedbacks/:id', authMiddleware, adminMiddleware, feedbackController.deleteFeedback);
 
 module.exports = router;
