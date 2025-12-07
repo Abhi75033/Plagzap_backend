@@ -22,43 +22,47 @@ const STOP_WORDS = new Set([
     'my', 'your', 'his', 'her', 'our', 'their', 'any', 'up', 'out'
 ]);
 
-// Preprocess text: lowercase, remove punctuation, filter stop words
+// Text Cleaning and Preprocessing in JavaScript
 const preprocessText = (text) => {
-    return text
-        .toLowerCase()
-        .replace(/[^\w\s]/g, '') // Remove punctuation
+    // Remove citation patterns like [1], [12], [a], [c] common in Wikipedia
+    const cleanedText = text.replace(/\[\w+\]/g, ' ');
+
+    // Convert to lowercase and remove non-alphanumeric chars
+    return cleanedText.toLowerCase()
+        .replace(/[^\w\s]/g, '')
         .split(/\s+/)
         .filter(word => word.length > 2 && !STOP_WORDS.has(word));
 };
 
-// Calculate Jaccard Similarity (better for text comparison than Levenshtein)
-const calculateJaccardSimilarity = (text1, text2) => {
+// Calculate Overlap Coefficient (better for inclusion detection)
+// intersection / min(set1, set2) - Returns 1.0 if one set is subset of another
+const calculateOverlapCoefficient = (text1, text2) => {
     const words1 = new Set(preprocessText(text1));
     const words2 = new Set(preprocessText(text2));
 
     if (words1.size === 0 || words2.size === 0) return 0;
 
     const intersection = new Set([...words1].filter(x => words2.has(x)));
-    const union = new Set([...words1, ...words2]);
-
-    return intersection.size / union.size;
+    // Use Math.min to detect if snippet is contained in chunk (or vice versa)
+    return intersection.size / Math.min(words1.size, words2.size);
 };
 
-// Calculate N-gram similarity for better phrase matching
+// Generate N-grams from text
 const getNGrams = (words, n) => {
     const ngrams = [];
-    for (let i = 0; i <= words.length - n; i++) {
+    for (let i = 0; i < words.length - n + 1; i++) {
         ngrams.push(words.slice(i, i + n).join(' '));
     }
     return ngrams;
 };
 
+// Calculate N-Gram Similarity (Sequence matching)
 const calculateNGramSimilarity = (text1, text2, n = 3) => {
     const words1 = preprocessText(text1);
     const words2 = preprocessText(text2);
 
     if (words1.length < n || words2.length < n) {
-        return calculateJaccardSimilarity(text1, text2);
+        return calculateOverlapCoefficient(text1, text2);
     }
 
     const ngrams1 = new Set(getNGrams(words1, n));
@@ -72,12 +76,17 @@ const calculateNGramSimilarity = (text1, text2, n = 3) => {
 
 // Combined similarity score using multiple methods
 const calculateTextSimilarity = (text1, text2) => {
-    const jaccardScore = calculateJaccardSimilarity(text1, text2);
+    // 1. Check for snippet containment (Overlap Coefficient)
+    const overlapScore = calculateOverlapCoefficient(text1, text2);
+
+    // 2. Check for phrase matching (N-grams)
     const ngramScore = calculateNGramSimilarity(text1, text2, 3);
 
-    // Weight: 40% Jaccard (word overlap), 60% N-gram (phrase matching)
-    // N-gram is more important for plagiarism as it catches copied phrases
-    return (jaccardScore * 0.4) + (ngramScore * 0.6);
+    // If we have a very high N-gram match (phrases match exactly), trust it more
+    if (ngramScore > 0.5) return ngramScore;
+
+    // Weight: 40% Overlap (word usage), 60% N-gram (phrase matching)
+    return (overlapScore * 0.4) + (ngramScore * 0.6);
 };
 
 // Check if the matched content is substantial enough
@@ -90,33 +99,14 @@ const isSubstantialMatch = (chunk, snippet) => {
     return commonWords.length >= 3;
 };
 
-// Perform Google Search
-const googleSearch = async (query) => {
-    const apiKey = process.env.GOOGLE_SEARCH_API_KEY;
-    const cx = process.env.GOOGLE_SEARCH_CX;
+// Web Search Service (Wikipedia + Google)
+const { searchForPlagiarism: searchWebForPlagiarism } = require('../services/webSearchService');
 
-    if (!apiKey || !cx) {
-        console.warn('Google Search Keys missing. Skipping search.');
-        return [];
-    }
-
-    try {
-        // Clean the query - use only first 100 chars to get better results
-        const cleanQuery = query.substring(0, 150).replace(/[^\w\s]/g, ' ').trim();
-
-        const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
-            params: {
-                key: apiKey,
-                cx: cx,
-                q: `"${cleanQuery}"`, // Use quotes for exact phrase matching
-                num: 5 // Fetch top 5 results for better coverage
-            }
-        });
-        return response.data.items || [];
-    } catch (error) {
-        console.error('Error fetching Google Search results:', error.message);
-        return [];
-    }
+/**
+ * Search for plagiarism sources (wrapper for the service)
+ */
+const searchForPlagiarism = async (query) => {
+    return await searchWebForPlagiarism(query);
 };
 
 exports.checkPlagiarism = async (req, res) => {
@@ -140,38 +130,40 @@ exports.checkPlagiarism = async (req, res) => {
 
         console.log('Analyzing text for user:', user._id, 'Length:', text.length);
 
-        // 1. Split text into chunks
-        const chunks = splitTextIntoChunks(text, 300); // 50-60 words
+        // 1. Split text into chunks (balance: accuracy vs speed)
+        const chunks = splitTextIntoChunks(text, 200); // Larger chunks = fewer API calls
         const highlights = [];
-        let sourcesFound = new Map(); // Track unique sources
+        let sourcesFound = new Map();
 
-        // 2. Select representative chunks to query (save API quota)
-        // We query every 2nd chunk to balance coverage vs speed/cost
-        const chunksToQuery = chunks.filter((_, index) => index % 2 === 0);
+        // 2. Smart sampling: Check representative chunks (not all)
+        // For large documents, check every 2nd chunk to balance speed vs accuracy
+        const chunksToCheck = chunks.length > 20
+            ? chunks.filter((_, index) => index % 2 === 0)  // Every 2nd chunk
+            : chunks;  // All chunks for small docs
 
-        console.log('Querying Google for', chunksToQuery.length, 'chunks...');
+        // Limit max chunks to avoid very long waits
+        const maxChunks = 30;
+        const finalChunks = chunksToCheck.slice(0, maxChunks);
 
-        // 3. Process each chunk
+        console.log(`🔎 Scanning ${finalChunks.length} of ${chunks.length} chunks (optimized)...`);
+
+        // 3. Process chunks with reduced delays
         for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i];
             let maxSimilarity = 0;
             let bestSource = null;
 
-            // Only query for selected chunks (every 2nd chunk)
-            if (i % 2 === 0) {
-                const searchResults = await googleSearch(chunk);
+            // Only search for sampled chunks
+            const shouldCheck = (chunks.length > 20 && i % 2 === 0) || chunks.length <= 20;
+
+            if (shouldCheck && i < maxChunks) {
+                const searchResults = await searchForPlagiarism(chunk);
 
                 for (const result of searchResults) {
-                    // Check snippet similarity
                     const snippet = result.snippet || "";
-
-                    // Skip if snippet is too short for meaningful comparison
                     if (snippet.length < 30) continue;
 
-                    // Calculate similarity using improved algorithm
                     const similarity = calculateTextSimilarity(chunk, snippet);
-
-                    // Also check if the match is substantial (enough common words)
                     const substantial = isSubstantialMatch(chunk, snippet);
 
                     if (similarity > maxSimilarity && substantial) {
@@ -184,12 +176,11 @@ exports.checkPlagiarism = async (req, res) => {
                     }
                 }
 
-                // Artificial delay to avoid hitting Google Rate Limits too hard
-                await new Promise(r => setTimeout(r, 200));
+                // Reduced delay (100ms instead of 200ms)
+                await new Promise(r => setTimeout(r, 100));
             }
 
-            // Threshold for "Plagiarism" - LOWERED to 0.30 for better detection
-            // 30% similarity indicates potential plagiarism (matches external tools)
+            // Threshold for plagiarism
             if (maxSimilarity > 0.30) {
                 highlights.push({
                     text: chunk,
@@ -206,14 +197,14 @@ exports.checkPlagiarism = async (req, res) => {
                 highlights.push({
                     text: chunk,
                     type: 'safe',
-                    score: Math.round(maxSimilarity * 100) // Show similarity even for safe chunks
+                    score: Math.round(maxSimilarity * 100)
                 });
             }
         }
 
-        // Calculate overall plagiarism score
-        // Only count 'plagiarized' chunks towards the score
-        const plagiarizedCount = highlights.filter(h => h.type === 'plagiarized').length;
+        // Calculate Scores
+        const plagiarizedChunks = highlights.filter(h => h.type === 'plagiarized');
+        const plagiarizedCount = plagiarizedChunks.length;
         const plagiarismScore = chunks.length > 0 ?
             Math.round((plagiarizedCount / chunks.length) * 100) : 0;
 
@@ -352,7 +343,7 @@ exports.bulkCheck = async (req, res) => {
                     let plagiarizedCount = 0;
 
                     for (const chunk of chunks) {
-                        const searchResults = await googleSearch(chunk);
+                        const searchResults = await searchForPlagiarism(chunk);
                         if (searchResults && searchResults.length > 0) {
                             const maxSimilarity = searchResults.reduce((max, result) => {
                                 const snippet = result.snippet || '';
