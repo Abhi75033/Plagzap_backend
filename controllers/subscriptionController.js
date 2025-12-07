@@ -421,6 +421,8 @@ exports.validateCoupon = async (req, res) => {
 
         // If planId provided, validate against specific plan; otherwise just return coupon info
 
+        console.log(`Coupon ${coupon.code} validated. ApplicablePlans: ${JSON.stringify(coupon.applicablePlans)}`);
+
         res.json({
             valid: true,
             coupon: {

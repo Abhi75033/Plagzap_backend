@@ -296,6 +296,8 @@ const createCoupon = async (req, res) => {
 
         await coupon.save();
         console.log(`✅ Coupon created: ${coupon.code} (${coupon.discountPercent}% off)`);
+        console.log(`   ApplicablePlans received: ${JSON.stringify(applicablePlans)}`);
+        console.log(`   ApplicablePlans saved: ${JSON.stringify(coupon.applicablePlans)}`);
 
         res.status(201).json({
             message: 'Coupon created successfully',
@@ -313,10 +315,31 @@ const updateCoupon = async (req, res) => {
         const { id } = req.params;
         const updates = req.body;
 
-        const coupon = await Coupon.findByIdAndUpdate(id, updates, { new: true });
+        console.log(`Updating coupon ${id}`);
+        console.log(`   applicablePlans in update request: ${JSON.stringify(updates.applicablePlans)}`);
+
+        // Find and update the coupon explicitly
+        const coupon = await Coupon.findById(id);
         if (!coupon) {
             return res.status(404).json({ error: 'Coupon not found' });
         }
+
+        // Update fields explicitly
+        if (updates.code) coupon.code = updates.code;
+        if (updates.discountPercent !== undefined) coupon.discountPercent = updates.discountPercent;
+        if (updates.description !== undefined) coupon.description = updates.description;
+        if (updates.expiresAt) coupon.expiresAt = updates.expiresAt;
+        if (updates.usageLimit !== undefined) coupon.usageLimit = updates.usageLimit;
+        if (updates.isActive !== undefined) coupon.isActive = updates.isActive;
+
+        // EXPLICITLY set applicablePlans array
+        if (updates.applicablePlans !== undefined) {
+            coupon.applicablePlans = updates.applicablePlans;
+            console.log(`   Setting applicablePlans to: ${JSON.stringify(updates.applicablePlans)}`);
+        }
+
+        await coupon.save();
+        console.log(`   Coupon saved. applicablePlans is now: ${JSON.stringify(coupon.applicablePlans)}`);
 
         res.json({ message: 'Coupon updated', coupon });
     } catch (error) {
