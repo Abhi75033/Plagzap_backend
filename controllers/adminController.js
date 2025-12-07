@@ -367,6 +367,9 @@ const deleteCoupon = async (req, res) => {
 
 // Send promotional email to all users or specific segment
 const sendPromotionalEmail = async (req, res) => {
+    console.log('🚀 PROMOTIONAL EMAIL ENDPOINT CALLED');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+
     try {
         const {
             subject,
@@ -385,34 +388,58 @@ const sendPromotionalEmail = async (req, res) => {
         let query = {};
         switch (targetAudience) {
             case 'free':
-                // Free users have tier = 'free' OR no tier set (null/undefined)
-                query.$or = [
-                    { subscriptionTier: 'free' },
-                    { subscriptionTier: null },
-                    { subscriptionTier: { $exists: false } }
-                ];
+                // Free users have tier = 'free' (default value)
+                query.subscriptionTier = 'free';
                 break;
             case 'paid':
-                query.subscriptionTier = { $nin: ['free', null] };
-                query.subscriptionTier = { $exists: true };
+                // Paid users have tier NOT equal to 'free'
+                query.subscriptionTier = { $ne: 'free' };
                 break;
             case 'expired':
                 query.subscriptionExpiry = { $lt: new Date() };
-                query.subscriptionTier = { $nin: ['free', null] };
+                query.subscriptionTier = { $ne: 'free' };
                 break;
             default: // 'all'
                 break;
         }
 
-        console.log('Email query:', JSON.stringify(query));
+        console.log('Promotional Email - Target Audience:', targetAudience);
+        console.log('Promotional Email - Query:', JSON.stringify(query));
+
+        // Debug: Show all unique subscription tiers in database
+        const allTiers = await User.distinct('subscriptionTier');
+        console.log('DEBUG - All unique subscription tiers in DB:', allTiers);
+
         const users = await User.find(query, { email: 1, name: 1 });
-        console.log(`Found ${users.length} users for target audience: ${targetAudience}`);
+        console.log(`Promotional Email - Found ${users.length} users`);
+
+        // Debug: show first few user emails
+        if (users.length > 0) {
+            console.log('First few users:', users.slice(0, 3).map(u => u.email));
+        } else {
+            // Debug: show what tiers exist in database
+            const tierStats = await User.aggregate([
+                { $group: { _id: '$subscriptionTier', count: { $sum: 1 } } }
+            ]);
+            console.log('DEBUG - Subscription tier distribution:', tierStats);
+        }
 
         if (users.length === 0) {
-            return res.status(400).json({ error: 'No users found in target audience' });
+            // Get tier stats for better error message
+            const tierStats = await User.aggregate([
+                { $group: { _id: '$subscriptionTier', count: { $sum: 1 } } }
+            ]);
+            console.log('No users found. Tier distribution:', tierStats);
+            return res.status(400).json({
+                error: 'No users found in target audience',
+                debug: tierStats
+            });
         }
 
         // Send emails in background
+        console.log('📧 Starting to send promotional emails to', users.length, 'users...');
+        console.log('📧 Users to email:', users.map(u => u.email));
+
         const results = await emailService.sendBulkPromotionalEmail(
             users,
             subject,
@@ -422,10 +449,12 @@ const sendPromotionalEmail = async (req, res) => {
             couponCode
         );
 
+        console.log('📧 Email send results:', results);
+
         const successful = results.filter(r => r.success).length;
         const failed = results.filter(r => !r.success).length;
 
-        console.log(`✅ Promotional email sent: ${successful} success, ${failed} failed`);
+        console.log(`✅ Promotional email completed: ${successful} success, ${failed} failed`);
 
         res.json({
             message: `Promotional email sent to ${successful} users`,

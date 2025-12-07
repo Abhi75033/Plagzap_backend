@@ -45,4 +45,26 @@ app.use('/api', apiRoutes);
 app.use('/api/admin', auth, adminAuth, adminRoutes); // Protect all admin routes
 app.use('/api/webhooks', webhookRoutes);
 
+// TEST EMAIL ENDPOINT (temporary - for debugging)
+app.post('/api/test-email', async (req, res) => {
+    console.log('🔥 TEST EMAIL ENDPOINT CALLED');
+    const emailService = require('./services/emailService');
+    try {
+        const result = await emailService.sendPromotionalEmail(
+            'abhishekyadav1112.21@gmail.com',
+            'Test User',
+            'Test Subject',
+            'This is a test email',
+            'Click Here',
+            'https://example.com',
+            'TESTCODE'
+        );
+        console.log('Test email result:', result);
+        res.json({ success: true, result });
+    } catch (error) {
+        console.error('Test email error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 module.exports = app;
