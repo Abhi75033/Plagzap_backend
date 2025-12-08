@@ -40,11 +40,17 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(passport.initialize()); // Initialize Passport
 
+// Request Logger Middleware
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/admin', auth, adminAuth, adminRoutes); // Protect all admin routes (MOVED UP)
 app.use('/api', apiRoutes);
-app.use('/api/admin', auth, adminAuth, adminRoutes); // Protect all admin routes
 app.use('/api/webhooks', webhookRoutes);
 
 // TEST EMAIL ENDPOINT (temporary - for debugging)

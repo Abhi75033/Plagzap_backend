@@ -19,7 +19,17 @@ const {
     getPrices,
 } = require('../controllers/adminController');
 
+const {
+    getPromoSettings,
+    updatePromoSettings,
+} = require('../controllers/promoSettingsController');
+
 // All routes here are protected by auth + adminAuth in app.js
+
+// Promotional banner settings (Moved to top for priority)
+router.get('/promo-settings', getPromoSettings);
+router.put('/promo-settings', updatePromoSettings);
+
 router.get('/stats', getStats);
 router.get('/users', getAllUsers);
 router.delete('/users/:id', deleteUser);

@@ -103,4 +103,8 @@ router.get('/admin/feedbacks', authMiddleware, adminMiddleware, feedbackControll
 router.patch('/admin/feedbacks/:id', authMiddleware, adminMiddleware, feedbackController.updateFeedbackStatus);
 router.delete('/admin/feedbacks/:id', authMiddleware, adminMiddleware, feedbackController.deleteFeedback);
 
+// Promotional banner (public)
+const { getActivePromo } = require('../controllers/promoSettingsController');
+router.get('/promo-settings/active', getActivePromo);
+
 module.exports = router;
