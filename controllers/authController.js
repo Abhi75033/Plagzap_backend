@@ -356,3 +356,58 @@ exports.revokeApiKey = async (req, res) => {
         res.status(500).json({ error: 'Server error' });
     }
 };
+
+// Google OAuth Authentication
+exports.googleAuth = (req, res, next) => {
+    const passport = require('passport');
+    passport.authenticate('google', {
+        scope: ['profile', 'email']
+    })(req, res, next);
+};
+
+// Google OAuth Callback
+exports.googleCallback = async (req, res, next) => {
+    const passport = require('passport');
+
+    passport.authenticate('google', { session: false }, async (err, profile) => {
+        try {
+            if (err || !profile) {
+                return res.redirect(`${process.env.CLIENT_URL || 'https://plagzap-frontend.vercel.app'}/login?error=google_auth_failed`);
+            }
+
+            // Find or create user
+            let user = await User.findOne({ email: profile.email });
+
+            if (!user) {
+                // Create new user from Google profile
+                user = new User({
+                    name: profile.displayName,
+                    email: profile.email,
+                    password: 'google-oauth-' + Math.random().toString(36), // Random password (not used)
+                    googleId: profile.id,
+                    avatar: profile.picture
+                });
+                await user.save();
+
+                // Send welcome email
+                emailService.sendWelcomeEmail(user.email, user.name).catch(err => {
+                    console.log('Welcome email error:', err.message);
+                });
+            } else if (!user.googleId) {
+                // Link Google ID to existing account
+                user.googleId = profile.id;
+                if (profile.picture) user.avatar = profile.picture;
+                await user.save();
+            }
+
+            // Generate JWT token
+            const token = generateToken(user._id);
+
+            // Redirect to frontend with token
+            res.redirect(`${process.env.CLIENT_URL || 'https://plagzap-frontend.vercel.app'}/auth-callback?token=${token}`);
+        } catch (error) {
+            console.error('Google callback error:', error);
+            res.redirect(`${process.env.CLIENT_URL || 'https://plagzap-frontend.vercel.app'}/login?error=server_error`);
+        }
+    })(req, res, next);
+};

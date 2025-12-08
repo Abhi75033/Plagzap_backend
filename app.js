@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const passport = require('./config/passport'); // Import passport config
 const apiRoutes = require('./routes/api');
 const authRoutes = require('./routes/auth');
 const subscriptionRoutes = require('./routes/subscription');
@@ -37,6 +38,7 @@ app.use(cors()); // Allow all origins for extension support
 app.use(express.json({ limit: '50mb' })); // Increased limit for large text
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(passport.initialize()); // Initialize Passport
 
 // Routes
 app.use('/api/auth', authRoutes);
