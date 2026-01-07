@@ -404,10 +404,10 @@ exports.googleCallback = async (req, res, next) => {
             const token = generateToken(user._id);
 
             // Redirect to frontend with token
-            res.redirect(`${process.env.CLIENT_URL || 'https://plagzap-frontend.vercel.app'}/auth-callback?token=${token}`);
+            res.redirect(`${process.env.CLIENT_URL || 'https://plagzap.xyz'}/auth-callback?token=${token}`);
         } catch (error) {
             console.error('Google callback error:', error);
-            res.redirect(`${process.env.CLIENT_URL || 'https://plagzap-frontend.vercel.app'}/login?error=server_error`);
+            res.redirect(`${process.env.CLIENT_URL || 'https://plagzap.xyz'}/login?error=server_error`);
         }
     })(req, res, next);
 };
