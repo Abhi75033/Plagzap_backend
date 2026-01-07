@@ -372,7 +372,7 @@ exports.googleCallback = async (req, res, next) => {
     passport.authenticate('google', { session: false }, async (err, profile) => {
         try {
             if (err || !profile) {
-                return res.redirect(`${process.env.CLIENT_URL || 'https://plagzap-frontend.vercel.app'}/login?error=google_auth_failed`);
+                return res.redirect(`${process.env.CLIENT_URL || 'https://plagzap.xyz'}/login?error=google_auth_failed`);
             }
 
             // Find or create user
